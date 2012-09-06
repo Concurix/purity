@@ -1,5 +1,6 @@
 #!/usr/bin/env escript
 %% vim: set ft=erlang:
+%%! -pa ebin
 
 %% Test whether running the analysis in parallel has the same results
 %% as running it sequentially.

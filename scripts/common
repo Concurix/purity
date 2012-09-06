@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: set et ts=4 sw=4:
 
 erl_exec() {
