@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Wrapper script for easier invocation of purity.
 
-source scripts/common
+PURITY_DIR=$(dirname ${BASH_SOURCE[0]})
+
+source ${PURITY_DIR}/scripts/common
 
 erl_exec purity_cli main -extra $@
 
