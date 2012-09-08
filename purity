@@ -3,7 +3,5 @@
 
 PURITY_DIR=$(dirname ${BASH_SOURCE[0]})
 
-source ${PURITY_DIR}/scripts/common
-
-erl_exec purity_cli main -extra $@
+erl -pa ${PURITY_DIR}/ebin -noshell -run purity_cli main -extra $@
 

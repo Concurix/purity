@@ -73,6 +73,9 @@ main() ->
     {Table, Final} = do_analysis(Files, Options,
         purity_plt:get_cache(Plt, Options)),
 
+    with_option(top_funs, Options, fun(Filename) ->
+		do_top_funs(Filename, Table, Final) end),
+
     %io:format("sizeof(Table): ~p, ~p~n", [erts_debug:size(Table), erts_debug:flat_size(Table)]),
     %io:format("sizeof(Final): ~p, ~p~n", [erts_debug:size(Final), erts_debug:flat_size(Final)]),
 
@@ -140,6 +143,17 @@ do_analysis(Files, Options, Initial) ->
                 purity:propagate(Table, Options) end),
     {Table, Final}.
 
+do_top_funs(Filename, Table, Final) ->
+    TopFuns = timeit("Finding top pure functions", fun() ->
+		  purity:top_funs(Table, Final) end),
+
+    case file:open(Filename, [write]) of
+	{ok, Io} ->
+	    io:format(Io, "% Top pure functions\n~p\n", [TopFuns]);
+	{error, Reason} ->
+	    io:format("ERROR opening top pure function file ~p: ~p~n",
+		      [Filename, Reason])
+    end.
 
 with_option(Opt, Options, Action) ->
     case option(Opt, Options) of
@@ -232,6 +246,9 @@ parse_args() ->
         {stats, [
                 "-s", "--stats",
                 {help, "Write statistical information to file"}]},
+        {top_funs, [
+                "--top-funs",
+                {help, "Compute top-most pure functions"}]},
         {quiet, [
                 "-q", "--quiet",
                 {type, bool},

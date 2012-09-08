@@ -32,6 +32,7 @@
 -export([propagate/2, propagate_termination/2, propagate_purity/2,
          propagate_both/2, find_missing/1]).
 -export([analyse_changed/3]).
+-export([top_funs/2]).
 
 -import(purity_utils, [fmt_mfa/1, str/2]).
 -import(purity_utils, [remove_args/1, dict_cons/3, filename_to_module/1]).
@@ -1583,6 +1584,57 @@ add_edges(Fun, Ctx, Graph) when is_list(Ctx) ->
     Graph;
 add_edges(_, _, Graph) ->
     Graph.
+
+
+%% @doc Find the top-most pure functions, i.e. those which are pure
+%% and have an impure caller.  Return the result as a set.
+
+-spec top_funs(dict(), dict()) -> ordsets:ordset(mfa()).
+
+top_funs(CallArcs, Pureness) ->
+    dict:fold(fun(Caller, Contexts, TopSet) ->
+		      add_top_fun(Caller, Contexts, Pureness, TopSet)
+	      end,
+	      ordsets:new(), CallArcs).
+
+-spec add_top_fun(mfa(), [context()], dict(), set()) -> set().
+
+add_top_fun({_, _, _}=Caller, Contexts, Pureness, TopSet) ->
+    case is_pure(Caller, Pureness) of
+	true ->
+	    %% Caller is pure, so callees are not top-most
+	    TopSet;
+	false ->
+	    %% Caller is impure, so pure callees are top-most
+	    Callees = if is_list(Contexts) ->
+			      lists:map(fun mfa_from_context/1, Contexts);
+			 true ->
+			      [mfa_from_context(Contexts)]
+		      end,
+	    PureCallees = lists:filter(
+		fun(none) ->
+			false;
+		   (Callee) ->
+			is_pure(Callee, Pureness)
+		end, Callees),
+	    lists:foldl(
+	        fun(Elem, SetIn) ->
+			ordsets:add_element(Elem, SetIn)
+		end, TopSet, PureCallees)
+    end;
+add_top_fun(_Caller, _Contexts, _Pureness, TopSet) ->
+    TopSet.
+	    
+
+-spec mfa_from_context(context()) -> mfa().
+
+mfa_from_context({remote, {Mod, Func, _}=MFA, _})
+  when is_atom(Mod) and is_atom(Func)->
+    MFA;
+mfa_from_context({local, {_, _, _}=MFA, _}) ->
+    MFA;
+mfa_from_context(_) ->
+    none.
 
 
 %%% Various helpers. %%%
