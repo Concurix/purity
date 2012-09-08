@@ -149,7 +149,7 @@ do_top_funs(Filename, Table, Final) ->
 
     case file:open(Filename, [write]) of
 	{ok, Io} ->
-	    io:format(Io, "% Top pure functions\n~p\n", [TopFuns]);
+	    io:format(Io, "% Top pure functions\n~p.\n", [TopFuns]);
 	{error, Reason} ->
 	    io:format("ERROR opening top pure function file ~p: ~p~n",
 		      [Filename, Reason])
