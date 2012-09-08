@@ -32,7 +32,7 @@
 -export([propagate/2, propagate_termination/2, propagate_purity/2,
          propagate_both/2, find_missing/1]).
 -export([analyse_changed/3]).
--export([top_funs/2]).
+-export([top_funs/3]).
 
 -import(purity_utils, [fmt_mfa/1, str/2]).
 -import(purity_utils, [remove_args/1, dict_cons/3, filename_to_module/1]).
@@ -1589,17 +1589,18 @@ add_edges(_, _, Graph) ->
 %% @doc Find the top-most pure functions, i.e. those which are pure
 %% and have an impure caller.  Return the result as a set.
 
--spec top_funs(dict(), dict()) -> ordsets:ordset(mfa()).
+-spec top_funs([module()], dict(), dict()) -> ordsets:ordset(mfa()).
 
-top_funs(CallArcs, Pureness) ->
+top_funs(Modules, CallArcs, Pureness) ->
     dict:fold(fun(Caller, Contexts, TopSet) ->
-		      add_top_fun(Caller, Contexts, Pureness, TopSet)
+		      add_top_fun(Modules, Caller, Contexts, Pureness, TopSet)
 	      end,
 	      ordsets:new(), CallArcs).
 
--spec add_top_fun(mfa(), [context()], dict(), set()) -> set().
+-spec add_top_fun(dict(), mfa(), [context()], dict(), set()) -> set().
 
-add_top_fun({_, _, _}=Caller, Contexts, Pureness, TopSet) ->
+add_top_fun(Modules, {_, _, _}=Caller, Contexts, Pureness, TopSet) ->
+    Ms = sets:from_list(Modules),
     case is_pure(Caller, Pureness) of
 	true ->
 	    %% Caller is pure, so callees are not top-most
@@ -1614,15 +1615,16 @@ add_top_fun({_, _, _}=Caller, Contexts, Pureness, TopSet) ->
 	    PureCallees = lists:filter(
 		fun(none) ->
 			false;
-		   (Callee) ->
-			is_pure(Callee, Pureness)
+		   ({M, _, _}=Callee) ->
+			sets:is_element(M, Ms) and
+			    is_pure(Callee, Pureness)
 		end, Callees),
 	    lists:foldl(
 	        fun(Elem, SetIn) ->
 			ordsets:add_element(Elem, SetIn)
 		end, TopSet, PureCallees)
     end;
-add_top_fun(_Caller, _Contexts, _Pureness, TopSet) ->
+add_top_fun(_Modules, _Caller, _Contexts, _Pureness, TopSet) ->
     TopSet.
 	    
 

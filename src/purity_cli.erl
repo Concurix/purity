@@ -73,9 +73,6 @@ main() ->
     {Table, Final} = do_analysis(Files, Options,
         purity_plt:get_cache(Plt, Options)),
 
-    with_option(top_funs, Options, fun(Filename) ->
-		do_top_funs(Filename, Table, Final) end),
-
     %io:format("sizeof(Table): ~p, ~p~n", [erts_debug:size(Table), erts_debug:flat_size(Table)]),
     %io:format("sizeof(Final): ~p, ~p~n", [erts_debug:size(Final), erts_debug:flat_size(Final)]),
 
@@ -117,6 +114,10 @@ main() ->
     with_option(stats, Options, fun(Filename) ->
                 do_stats(Filename, Modules, Final) end),
 
+    %% Write top-most pure functions to a file.
+    with_option(top_funs, Options, fun(Filename) ->
+		do_top_funs(Filename, Modules, Table, Final) end),
+
     case option(build_plt, Options) orelse option(add_to_plt, Options) of
         true ->
             PltIn = option(plt, Options, purity_plt:get_default_path()),
@@ -143,9 +144,9 @@ do_analysis(Files, Options, Initial) ->
                 purity:propagate(Table, Options) end),
     {Table, Final}.
 
-do_top_funs(Filename, Table, Final) ->
+do_top_funs(Filename, Modules, Table, Final) ->
     TopFuns = timeit("Finding top pure functions", fun() ->
-		  purity:top_funs(Table, Final) end),
+		  purity:top_funs(Modules, Table, Final) end),
 
     case file:open(Filename, [write]) of
 	{ok, Io} ->
