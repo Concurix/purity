@@ -1,8 +1,8 @@
 % vim: set ft=erlang:
 
 {application, purity,
- [{description, "Purity Analyzer for Erlang programs, version %VSN%"},
-  {vsn, "%VSN%"},
+ [{description, "Purity Analyzer for Erlang programs, version 0.2"},
+  {vsn, "0.2"},
   {modules, [purity,
              purity_plt,
              purity_cli,
