@@ -151,6 +151,8 @@ sort(Stats) ->
 compare({_, S1}, {_, S2}) ->
     percent(S1) =< percent(S2).
 
+-spec percent(stats()) -> number().
+
 percent(#stats{p = P} = S) ->
     percent(P, total(S)).
 
