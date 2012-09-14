@@ -33,6 +33,7 @@
          propagate_both/2, find_missing/1]).
 -export([analyse_changed/3]).
 -export([top_funs/3]).
+-export([score/2]).
 
 -import(purity_utils, [fmt_mfa/1, str/2]).
 -import(purity_utils, [remove_args/1, dict_cons/3, filename_to_module/1]).
@@ -135,6 +136,89 @@ load_plt_silent(Opts) ->
             Plt
     end.
 
+
+%% Unflatten a list based on a predicate
+
+splitafter(_Pred, []) ->
+    {[], []};
+splitafter(Pred, [H|T]) ->
+    case Pred(H) of
+	true ->
+	    {[H], T};
+	false ->
+	    {Prefix, Suffix} = splitafter(Pred, T),
+	    {[H|Prefix], Suffix}
+    end.
+
+unflatten(_Pred, []) ->
+    [];
+unflatten(Pred, List) ->
+    case splitafter(Pred, List) of
+	{Prefix, []} ->
+	    [Prefix];
+	{Prefix, Suffix} ->
+	    [Prefix|unflatten(Pred, Suffix)]
+    end.
+   
+
+%% Parse all forms in a list of list of tokens.  Return
+%% the empty list in case of any parsing error.
+
+parse_forms_helper([]) ->
+    [];
+parse_forms_helper([H|T]) ->
+    io:format("Parse ~p\n", [H]),
+    case erl_parse:parse_form(H) of
+	{ok, AbsForm} ->
+	    io:format("Result ~p\n", [AbsForm]),
+	    [AbsForm|parse_forms(T)];
+	{error, ErrorInfo} ->
+	    io:format("Error ~p\n", [ErrorInfo]),
+	    throw(parse_error)
+    end.
+
+parse_forms(Tokens) ->
+    try
+	parse_forms_helper(Tokens)
+    catch
+	throw:parse_error ->
+	    []
+    end.
+    
+
+%% @doc Return a purity score for a module.  Initially the purity
+%% score is the fraction of pure functions.
+
+-spec score(module(), purity_utils:options()) -> dict().
+score(CodeText, Options) ->
+    io:format("CodeText => ~p\n", [CodeText]),
+    Tokens = case erl_scan:string(CodeText) of
+		 {ok, Toks, _} -> Toks;
+		 {error, _ErrorInfo, _} -> []
+	     end,
+    io:format("Tokens => ~p\n", [Tokens]),
+    SplitTokens = unflatten(fun(T) ->
+				    case T of
+					{dot, _} -> true;
+					_ -> false
+				    end end, Tokens),
+    io:format("Split Tokens => ~p\n", [SplitTokens]),
+    Forms = parse_forms(SplitTokens),
+    io:format("Forms => ~p\n", [Forms]),
+
+    case compile:forms(Forms, [binary, copt, to_core, return_errors]) of
+	{ok, Module, Core} ->
+	    Final = module(Core, Options),
+	    case purity_stats:gather([Module], Final) of
+		[{Module, Stats}] ->
+		    purity_stats:percent(Stats);
+		_ ->
+		    0.0
+	    end;
+	_ ->
+	    0.0
+    end.
+    
 
 %% Keep track of the following values for the currently analysed function.
 %% Some of them persist across functions as well.

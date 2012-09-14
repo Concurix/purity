@@ -25,7 +25,7 @@
 
 -module(purity_stats).
 
--export([gather/2, write/2]).
+-export([gather/2, write/2, percent/1]).
 
 -export_type([stats/0]).
 
