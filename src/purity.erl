@@ -137,76 +137,54 @@ load_plt_silent(Opts) ->
     end.
 
 
-%% Unflatten a list based on a predicate
+%% Code copied from cx/bench/src/lib/bench_compile.erl, which we
+%% should unify.
 
-splitafter(_Pred, []) ->
-    {[], []};
-splitafter(Pred, [H|T]) ->
-    case Pred(H) of
-	true ->
-	    {[H], T};
-	false ->
-	    {Prefix, Suffix} = splitafter(Pred, T),
-	    {[H|Prefix], Suffix}
-    end.
-
-unflatten(_Pred, []) ->
-    [];
-unflatten(Pred, List) ->
-    case splitafter(Pred, List) of
-	{Prefix, []} ->
-	    [Prefix];
-	{Prefix, Suffix} ->
-	    [Prefix|unflatten(Pred, Suffix)]
-    end.
-   
-
-%% Parse all forms in a list of list of tokens.  Return
-%% the empty list in case of any parsing error.
-
-parse_forms_helper([]) ->
-    [];
-parse_forms_helper([H|T]) ->
-    io:format("Parse ~p\n", [H]),
-    case erl_parse:parse_form(H) of
-	{ok, AbsForm} ->
-	    io:format("Result ~p\n", [AbsForm]),
-	    [AbsForm|parse_forms(T)];
-	{error, ErrorInfo} ->
-	    io:format("Error ~p\n", [ErrorInfo]),
-	    throw(parse_error)
-    end.
-
-parse_forms(Tokens) ->
+compile(Text) ->
     try
-	parse_forms_helper(Tokens)
+	Filename = write_to_tempfile(Text),
+	case compile:file(Filename, [binary, no_error_module_mismatch, copt, to_core, return]) of
+	    {ok, Mod, Core, _W } ->
+		cleanup_tempfile(Filename),
+		{ok, Mod, Core};
+	    {error, Errors, Warnings} ->
+		cleanup_tempfile(Filename),
+		{error, Errors, Warnings}
+	end
     catch
-	throw:parse_error ->
-	    []
-    end.
-    
+        Err:Reason ->
+            io:format(
+	      "compile_and_load failed, err:reason {~p:~p}~n~p~n",
+	      [Err, Reason, Text]
+	     ),
+            {error, Err, Reason}
+    end.		
+
+write_to_tempfile(Text) ->
+    Filename = get_tempfilename(),
+    case file:open(Filename, [write]) of
+        {ok, F} ->
+	    file:write(F, Text),
+	    file:close(F);
+        {error, Reason} ->
+            io:format("Couldn't open temp file ~p: ~p\n", [Filename, Reason])
+    end,
+    Filename.
+
+cleanup_tempfile(Filename) ->
+    file:delete(Filename).
+	
+get_tempfilename() ->
+    {Mega, Secs, Micro} = now(),
+    lists:flatten(["/tmp/",net_adm:localhost(), io_lib:format("~p-~p-~p",[Mega, Secs, Micro]), ".erl" ]).
+
 
 %% @doc Return a purity score for a module.  Initially the purity
 %% score is the fraction of pure functions.
 
 -spec score(module(), purity_utils:options()) -> dict().
 score(CodeText, Options) ->
-    io:format("CodeText => ~p\n", [CodeText]),
-    Tokens = case erl_scan:string(CodeText) of
-		 {ok, Toks, _} -> Toks;
-		 {error, _ErrorInfo, _} -> []
-	     end,
-    io:format("Tokens => ~p\n", [Tokens]),
-    SplitTokens = unflatten(fun(T) ->
-				    case T of
-					{dot, _} -> true;
-					_ -> false
-				    end end, Tokens),
-    io:format("Split Tokens => ~p\n", [SplitTokens]),
-    Forms = parse_forms(SplitTokens),
-    io:format("Forms => ~p\n", [Forms]),
-
-    case compile:forms(Forms, [binary, copt, to_core, return_errors]) of
+    case compile(CodeText) of
 	{ok, Module, Core} ->
 	    Final = module(Core, Options),
 	    case purity_stats:gather([Module], Final) of
