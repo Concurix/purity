@@ -32,7 +32,7 @@
 -export([propagate/2, propagate_termination/2, propagate_purity/2,
          propagate_both/2, find_missing/1]).
 -export([analyse_changed/3]).
--export([top_funs/3]).
+-export([top_funs/3, top_funs_from_code/2]).
 -export([score/2]).
 
 -import(purity_utils, [fmt_mfa/1, str/2]).
@@ -182,7 +182,7 @@ get_tempfilename() ->
 %% @doc Return a purity score for a module.  Initially the purity
 %% score is the fraction of pure functions.
 
--spec score(module(), purity_utils:options()) -> dict().
+-spec score(string(), purity_utils:options()) -> dict().
 score(CodeText, Options) ->
     case compile(CodeText) of
 	{ok, Module, Core} ->
@@ -1650,45 +1650,84 @@ add_edges(_, _, Graph) ->
 
 %% @doc Find the top-most pure functions, i.e. those which are pure
 %% and have an impure caller.  Return the result as a set.
+%%
+%% Modules is a list of modules to constrain the results.
+%% CallArcs is a dict mapping M/F/A keys to the functions they call.
+%% Pureness is a dict mapping M/F/A keys to concrete purity values.
 
 -spec top_funs([module()], dict(), dict()) -> ordsets:ordset(mfa()).
 
 top_funs(Modules, CallArcs, Pureness) ->
-    dict:fold(fun(Caller, Contexts, TopSet) ->
-		      add_top_fun(Modules, Caller, Contexts, Pureness, TopSet)
-	      end,
-	      ordsets:new(), CallArcs).
+    %% Create the list of all pure callers in any of the modules
+    ModuleSet = sets:from_list(Modules),
+    Keys = dict:fetch_keys(CallArcs),
+    NotCalled = ordsets:from_list(
+                  lists:filter(fun(Caller) ->
+                                       is_pure_in_modules(Caller, ModuleSet, Pureness)
+                               end, Keys)),
+    {KnownTop, NotCalled2} =
+        dict:fold(fun(Caller, Contexts, {KnownTop, NotCalled2}) ->
+                          add_top_fun(Modules, Caller, Contexts, Pureness, KnownTop, NotCalled2)
+                  end,
+                  {ordsets:new(), NotCalled}, CallArcs),
+    ordsets:union(KnownTop, NotCalled2).
 
--spec add_top_fun(dict(), mfa(), [context()], dict(), set()) -> set().
 
-add_top_fun(Modules, {_, _, _}=Caller, Contexts, Pureness, TopSet) ->
+%% Add any guaranteed top-most pure functions to KnownTop and remove any
+%% called functions from NotCalled.  KnownTop functions are ones that are
+%% both pure and called by an impure function.  NotCalled functions are
+%% ones that are pure and possibly not called by any function (i.e. exported).
+
+-spec add_top_fun(dict(), mfa(), [context()], dict(), ordsets:ordset(), ordsets:ordset()) ->
+                         {ordsets:ordset(), ordsets:ordset()}.
+
+add_top_fun(Modules, {_, _, _}=Caller, Contexts, Pureness, KnownTop, NotCalled) ->
     Ms = sets:from_list(Modules),
+    %% Remove callees from the NotCalled set
+    Callees = mfas_from_contexts(Contexts),
+    NotCalled2 = lists:foldl(fun(Callee, NotCalledAcc) ->
+                                     ordsets:del_element(Callee, NotCalledAcc)
+                             end,
+                             NotCalled, Callees),
+
     case is_pure(Caller, Pureness) of
 	true ->
 	    %% Caller is pure, so callees are not top-most
-	    TopSet;
+	    {KnownTop, NotCalled2};
 	false ->
 	    %% Caller is impure, so pure callees are top-most
-	    Callees = if is_list(Contexts) ->
-			      lists:map(fun mfa_from_context/1, Contexts);
-			 true ->
-			      [mfa_from_context(Contexts)]
-		      end,
-	    PureCallees = lists:filter(
-		fun(none) ->
-			false;
-		   ({M, _, _}=Callee) ->
-			sets:is_element(M, Ms) and
-			    is_pure(Callee, Pureness)
-		end, Callees),
-	    lists:foldl(
-	        fun(Elem, SetIn) ->
-			ordsets:add_element(Elem, SetIn)
-		end, TopSet, PureCallees)
+            PureCallees = lists:filter(fun(Callee) ->
+                                               is_pure_in_modules(Callee, Ms, Pureness)
+                                       end, Callees),
+	    KnownTop2 = lists:foldl(
+                          fun(Elem, SetIn) ->
+                                  ordsets:add_element(Elem, SetIn)
+                          end, KnownTop, PureCallees),
+            {KnownTop2, NotCalled2}
     end;
-add_top_fun(_Modules, _Caller, _Contexts, _Pureness, TopSet) ->
-    TopSet.
-	    
+add_top_fun(_Modules, _Caller, _Contexts, _Pureness, KnownTop, NotCalled) ->
+    {KnownTop, NotCalled}.
+
+
+%% Returns true iff Callee is both pure and within one of the modules.
+
+-spec is_pure_in_modules(mfa() | none, set(), dict()) -> boolean().
+
+is_pure_in_modules({M, _, _}=Callee, Modules, Pureness) ->
+    sets:is_element(M, Modules) and is_pure(Callee, Pureness);
+is_pure_in_modules(_, _Modules, _Pureness) ->
+    false.
+
+
+-spec mfas_from_contexts(context() | [context()]) -> [mfa()].
+
+mfas_from_contexts(Contexts) ->
+    if is_list(Contexts) ->
+            lists:map(fun mfa_from_context/1, Contexts);
+       true ->
+            [mfa_from_context(Contexts)]
+    end.
+
 
 -spec mfa_from_context(context()) -> mfa().
 
@@ -1699,6 +1738,24 @@ mfa_from_context({local, {_, _, _}=MFA, _}) ->
     MFA;
 mfa_from_context(_) ->
     none.
+
+
+%% @doc Return a set of topmost pure functions containined in
+%% a string of Erlang code.
+
+-spec top_funs_from_code(string(), purity_utils:options()) ->
+      ordsets:ordset(mfa()) | {error, compilation_failure}.
+top_funs_from_code(CodeText, Options) ->
+    case compile(CodeText) of
+	{ok, Module, Core} ->
+            Plt = load_plt_silent(Options),
+            Tab = purity_plt:get_cache(Plt, Options),
+	    Dep = module(Core, Options, Tab),
+            Pureness = propagate(Dep, Options),
+            top_funs([Module], Dep, Pureness);
+	_ ->
+	    {error, compilation_failure}
+    end.
 
 
 %%% Various helpers. %%%
