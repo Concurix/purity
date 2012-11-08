@@ -33,6 +33,7 @@
          propagate_both/2, find_missing/1]).
 -export([analyse_changed/3]).
 -export([top_funs/3, top_funs_from_code/2]).
+-export([pure_funs/3, pure_funs_from_code/2]).
 -export([score/2]).
 
 -import(purity_utils, [fmt_mfa/1, str/2]).
@@ -1673,6 +1674,36 @@ top_funs(Modules, CallArcs, Pureness) ->
     ordsets:union(KnownTop, NotCalled2).
 
 
+%% @doc Find all of the pure functions within a list of modules
+%% and return the result as a set.
+%%
+%% Modules is a list of modules to constrain the results.
+%% CallArcs is a dict mapping M/F/A keys to the functions they call.
+%% Pureness is a dict mapping M/F/A keys to concrete purity values.
+
+-spec pure_funs([module()], dict(), dict()) -> ordsets:ordset(mfa()).
+
+pure_funs(Modules, CallArcs, Pureness) ->
+    %% Create the list of all pure callers in any of the modules
+    ModuleSet = sets:from_list(Modules),
+    dict:fold(
+      fun(Caller, Contexts, PureAcc) ->
+              PureAcc2 = case is_pure_in_modules(Caller, ModuleSet, Pureness) of
+                             true ->
+                                 ordsets:add_element(Caller, PureAcc);
+                             false ->
+                                 PureAcc
+                         end,
+
+              Callees = mfas_from_contexts(Contexts),
+              PureCallees = lists:filter(fun(Callee) ->
+                                                 is_pure_in_modules(Callee, ModuleSet, Pureness)
+                                         end, Callees),
+              ordsets:union(PureAcc2, ordsets:from_list(PureCallees))
+      end,
+      ordsets:new(), CallArcs).
+
+
 %% Add any guaranteed top-most pure functions to KnownTop and remove any
 %% called functions from NotCalled.  KnownTop functions are ones that are
 %% both pure and called by an impure function.  NotCalled functions are
@@ -1740,7 +1771,7 @@ mfa_from_context(_) ->
     none.
 
 
-%% @doc Return a set of topmost pure functions containined in
+%% @doc Return a set of topmost pure functions contained in
 %% a string of Erlang code.
 
 -spec top_funs_from_code(string(), purity_utils:options()) ->
@@ -1753,6 +1784,24 @@ top_funs_from_code(CodeText, Options) ->
 	    Dep = module(Core, Options, Tab),
             Pureness = propagate(Dep, Options),
             top_funs([Module], Dep, Pureness);
+	_ ->
+	    {error, compilation_failure}
+    end.
+
+
+%% @doc Return a set of all pure functions contained in
+%% a string of Erlang code.
+
+-spec pure_funs_from_code(string(), purity_utils:options()) ->
+      ordsets:ordset(mfa()) | {error, compilation_failure}.
+pure_funs_from_code(CodeText, Options) ->
+    case compile(CodeText) of
+	{ok, Module, Core} ->
+            Plt = load_plt_silent(Options),
+            Tab = purity_plt:get_cache(Plt, Options),
+	    Dep = module(Core, Options, Tab),
+            Pureness = propagate(Dep, Options),
+            pure_funs([Module], Dep, Pureness);
 	_ ->
 	    {error, compilation_failure}
     end.
