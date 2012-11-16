@@ -19,7 +19,7 @@
 %% @end
 %% =====================================================================
 
-%% Test comment number 1.
+%% Test comment number 2.
 
 %%%
 %%% @doc Pureness analysis of Erlang functions.
