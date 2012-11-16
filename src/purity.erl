@@ -1790,7 +1790,7 @@ top_funs_from_code(CodeText, Options) ->
 
 
 %% @doc Return a set of all pure functions contained in
-%% a string of Erlang code, according to the Options.
+%% a string of Erlang code, according to the options.
 
 -spec pure_funs_from_code(string(), purity_utils:options()) ->
       ordsets:ordset(mfa()) | {error, compilation_failure}.
