@@ -2,35 +2,36 @@
 
 ## Strip comments and lines with undefined functions.
 strip_bare() {
-    gsed '/^#/ d;
-         /^.\+[ \t]\+.\+$/ p;
+    sed -E '/^#/ d;
+         /^.+[[:space:]]+.+$/ p;
          d' $@
 }
 
 ## Expand aliases for pureness values.
 expand_purity() {
-    gsed '
-      s/[ \t]\+false$/ {false,"BIF"}/;
-      s/[ \t]\+ex$/ [exceptions]/;
-      s/[ \t]\+se$/ [side_effects]/;
-      s/[ \t]\+nd$/ [non_determinism]/;
+    sed -E '
+      s/[[:space:]]+false$/ {false,"BIF"}/;
+      s/[[:space:]]+ex$/ [exceptions]/;
+      s/[[:space:]]+se$/ [side_effects]/;
+      s/[[:space:]]+nd$/ [non_determinism]/;
       ' $@
 }
 
 convert() {
-    gsed '
+    sed -E '
       s/^/is_pure(/;
-      s/[ \t]\+/) -> \n    /;
+      s/[[:space:]]+/) -> \
+    /;
       s/$/;/
       ' $@
 }
 
 select_funs() {
-    gsed '/^[^,]\+,[^,]\+,[0-9]\+[ \t]\+/p; d' $@
+    sed -E '/^[^,]+,[^,]+,[0-9]+[[:space:]]+/p; d' $@
 }
 
 select_primops() {
-    gsed '/^[^,]\+,[0-9]\+[ \t]\+/p; d' $@
+    sed -E '/^[^,]+,[0-9]+[[:space:]]+/p; d' $@
 }
 
 header() {
