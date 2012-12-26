@@ -32,8 +32,8 @@
 -export([propagate/2, propagate_termination/2, propagate_purity/2,
          propagate_both/2, find_missing/1]).
 -export([analyse_changed/3]).
--export([top_funs/3, top_funs_from_code/2]).
--export([pure_funs/3, pure_funs_from_code/2]).
+-export([top_funs/3, top_funs_from_code/2, top_funs_from_modules/2]).
+-export([pure_funs/3, pure_funs_from_code/2, pure_funs_from_modules/2]).
 -export([score/2]).
 
 -import(purity_utils, [fmt_mfa/1, str/2]).
@@ -1806,6 +1806,29 @@ pure_funs_from_code(CodeText, Options) ->
 	    {error, compilation_failure}
     end.
 
+%% @doc Return a set of topmost pure functions contained in
+%% a list of Erlang modules
+
+-spec top_funs_from_modules([module()], purity_utils:options()) ->
+      ordsets:ordset(mfa()).
+top_funs_from_modules(Modules, Options) ->
+	Plt = load_plt_silent(Options),
+	Tab = purity_plt:get_cache(Plt, Options),
+	Dep = modules(Modules, Options, Tab),
+	Pureness = propagate(Dep, Options),
+	top_funs(Modules, Dep, Pureness).
+
+%% @doc Return a set of all pure functions contained in
+%% list of Erlang Modules
+
+-spec pure_funs_from_modules([module()], purity_utils:options()) ->
+      ordsets:ordset(mfa()).
+pure_funs_from_modules(Modules, Options) ->
+	Plt = load_plt_silent(Options),
+	Tab = purity_plt:get_cache(Plt, Options),
+	Dep = modules(Modules, Options, Tab),
+	Pureness = propagate(Dep, Options),
+	pure_funs(Modules, Dep, Pureness).
 
 %%% Various helpers. %%%
 
