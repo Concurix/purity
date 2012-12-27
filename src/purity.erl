@@ -1807,28 +1807,33 @@ pure_funs_from_code(CodeText, Options) ->
     end.
 
 %% @doc Return a set of topmost pure functions contained in
-%% a list of Erlang modules
+%% a set of modules.  The modules are passed as a list of
+%% {Module, Loaded} tuples as produced by code:all_loaded().
 
--spec top_funs_from_modules([module()], purity_utils:options()) ->
+-spec top_funs_from_modules([{module(), string()}], purity_utils:options()) ->
       ordsets:ordset(mfa()).
-top_funs_from_modules(Modules, Options) ->
-	Plt = load_plt_silent(Options),
-	Tab = purity_plt:get_cache(Plt, Options),
-	Dep = modules(Modules, Options, Tab),
-	Pureness = propagate(Dep, Options),
-	top_funs(Modules, Dep, Pureness).
+top_funs_from_modules(LoadedModules, Options) ->
+    {Modules, Filenames} = lists:unzip(LoadedModules),
+    Plt = load_plt_silent(Options),
+    Tab = purity_plt:get_cache(Plt, Options),
+    Dep = pmodules(Filenames, Options, Tab),
+    Pureness = propagate(Dep, Options),
+    top_funs(Modules, Dep, Pureness).
 
-%% @doc Return a set of all pure functions contained in
-%% list of Erlang Modules
 
--spec pure_funs_from_modules([module()], purity_utils:options()) ->
+%% @doc Return a set of pure functions contained in a set of modules.
+%% The modules are passed as a list of {Module, Loaded} tuples as
+%% produced by code:all_loaded().
+
+-spec pure_funs_from_modules([{module(), string()}], purity_utils:options()) ->
       ordsets:ordset(mfa()).
-pure_funs_from_modules(Modules, Options) ->
-	Plt = load_plt_silent(Options),
-	Tab = purity_plt:get_cache(Plt, Options),
-	Dep = modules(Modules, Options, Tab),
-	Pureness = propagate(Dep, Options),
-	pure_funs(Modules, Dep, Pureness).
+pure_funs_from_modules(LoadedModules, Options) ->
+    {Modules, Filenames} = lists:unzip(LoadedModules),
+    Plt = load_plt_silent(Options),
+    Tab = purity_plt:get_cache(Plt, Options),
+    Dep = pmodules(Filenames, Options, Tab),
+    Pureness = propagate(Dep, Options),
+    pure_funs(Modules, Dep, Pureness).
 
 %%% Various helpers. %%%
 
