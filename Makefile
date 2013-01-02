@@ -1,6 +1,6 @@
 # vim: set noet ts=8 sw=8:
 
-.PHONY: units clean count build_tests tests dialyzer_plt dialyzer docs
+.PHONY: units clean count build_tests tests dialyzer_plt dialyzer docs install
 
 ERLC ?= erlc
 DIALYZER ?= dialyzer
@@ -31,6 +31,8 @@ GENERATED := $(ESRC)/purity_bifs.erl
 TEST_SRC := $(wildcard $(TEST)/*.erl)
 TEST_BIN := $(patsubst %.erl, %.beam, $(TEST_SRC))
 
+ROOT=/usr/local/lib/erlang
+INSTALL_DIR=$(ROOT)/lib/purity-0.2
 
 all: $(EBIN) $(GENERATED) $(BIN) $(APP)
 
@@ -115,4 +117,12 @@ distclean: clean
 
 count:
 	@sloccount . | awk '/^SLOC\t/,/^Total Physical/ { print }' | grep -v '^$$'
+
+install:
+	mkdir -p $(INSTALL_DIR)
+	cp initial.plt $(INSTALL_DIR)/initial.plt
+	cp -r doc $(INSTALL_DIR)/doc
+	cp -r src $(INSTALL_DIR)/src
+	cp -r ebin $(INSTALL_DIR)/ebin
+	cp -r test $(INSTALL_DIR)/test
 
