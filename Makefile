@@ -119,10 +119,14 @@ count:
 	@sloccount . | awk '/^SLOC\t/,/^Total Physical/ { print }' | grep -v '^$$'
 
 install:
-	mkdir -p $(INSTALL_DIR)
-	cp initial.plt $(INSTALL_DIR)/initial.plt
-	cp -r doc $(INSTALL_DIR)/doc
-	cp -r src $(INSTALL_DIR)/src
-	cp -r ebin $(INSTALL_DIR)/ebin
-	cp -r test $(INSTALL_DIR)/test
+	install -d $(INSTALL_DIR)
+	install initial.plt $(INSTALL_DIR)
+	install -d $(INSTALL_DIR)/doc
+	install doc/* $(INSTALL_DIR)/doc
+	install -d $(INSTALL_DIR)/src
+	install src/* $(INSTALL_DIR)/src
+	install -d $(INSTALL_DIR)/ebin
+	install ebin/* $(INSTALL_DIR)/ebin
+	install -d $(INSTALL_DIR)/test
+	install test/* $(INSTALL_DIR)/test
 
